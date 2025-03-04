@@ -1,20 +1,149 @@
+/* 基础样式 */
 body {
-    font-family: 'Courier New', monospace;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
     margin: 0;
-    background-color: #000000;
-    color: #f0f0f0;
+    padding: 0;
     overflow: hidden;
+    background: #000;
 }
 
+/* 游戏容器 */
 .game-container {
-    display: flex;
-    flex-direction: column;
-    width: 90vw;
-    height: 90vh;
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+}
+
+/* 游戏画布 */
+#gameCanvas {
+    display: block;
+    margin: 0 auto;
+}
+
+/* 基础UI样式 */
+.game-ui {
+    color: white;
+    font-family: Arial, sans-serif;
+}
+
+/* 移动端响应式样式 */
+@media (max-width: 768px) {
+    .game-container {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+    }
+
+    .top-panel {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: auto;
+        background: rgba(0, 0, 0, 0.9);
+        z-index: 100;
+        font-size: 14px;
+        padding: 5px;
+    }
+
+    .main-area {
+        flex-direction: column;
+        padding-top: 40px; /* 为顶部面板留出空间 */
+        height: calc(100vh - 40px);
+    }
+
+    .game-area {
+        flex: 1;
+        margin-bottom: 190px; /* 为底部UI留出空间 */
+    }
+
+    .inventory-panel {
+        position: fixed;
+        bottom: 170px; /* 控制台高度 + 背包高度 */
+        left: 0;
+        right: 0;
+        width: 100%;
+        height: 70px;
+        background: rgba(0, 0, 0, 0.9);
+        border-left: none;
+        padding: 8px;
+        z-index: 99;
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .inventory-list {
+        display: flex;
+        padding: 0;
+        margin: 0;
+    }
+
+    .inventory-item {
+        flex: 0 0 auto;
+        width: 60px;
+        height: 60px;
+        margin-right: 8px;
+        padding: 5px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 5px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+    }
+
+    .console-panel {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 170px;
+        background: rgba(0, 0, 0, 0.9);
+        z-index: 98;
+    }
+
+    .console-output {
+        height: 120px;
+    }
+
+    .console-input input {
+        height: 30px;
+        font-size: 14px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .attribute-list {
+        margin-top: 0;
+        display: flex;
+        gap: 10px;
+        padding: 5px;
+    }
+
+    .attribute {
+        font-size: 12px;
+        margin: 0;
+        white-space: nowrap;
+    }
+
+    #gameCanvas {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+    }
+
+    /* 状态条样式 */
+    .health-bar, .mana-bar, .exp-bar {
+        height: 15px;
+        margin: 2px 0;
+    }
+
+    .bar-text {
+        font-size: 10px;
+        line-height: 15px;
+    }
 }
 
 .top-panel {

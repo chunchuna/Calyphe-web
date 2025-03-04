@@ -1182,6 +1182,30 @@ class Game {
         
         // 更新顶部面板信息
         this.updateTopPanel();
+
+        // 为背包区域添加触摸滑动支持
+        const inventoryContainer = document.querySelector('.inventory-container');
+        if (inventoryContainer) {
+            let startX = 0;
+            let scrollLeft = 0;
+
+            inventoryContainer.addEventListener('touchstart', (e) => {
+                startX = e.touches[0].pageX - inventoryContainer.offsetLeft;
+                scrollLeft = inventoryContainer.scrollLeft;
+            });
+
+            inventoryContainer.addEventListener('touchmove', (e) => {
+                if (!startX) return;
+                
+                const x = e.touches[0].pageX - inventoryContainer.offsetLeft;
+                const walk = (x - startX) * 2; // 滑动速度倍数
+                inventoryContainer.scrollLeft = scrollLeft - walk;
+            });
+
+            inventoryContainer.addEventListener('touchend', () => {
+                startX = null;
+            });
+        }
     }
     
     // 调整画布大小
