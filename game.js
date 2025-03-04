@@ -109,51 +109,134 @@ class Game {
         
         // 添加控制台焦点状态
         this.isConsoleActive = false;
+        
+        // 添加联机相关属性
+        this.ws = null;
+        this.isOnline = false;
+        this.otherPlayers = new Map(); // Map<ip, {x, y, sprite}>
+        
+        // 添加触摸控制相关属性
+        this.touchControl = {
+            startX: 0,
+            startY: 0,
+            isMoving: false,
+            minSwipeDistance: 30 // 最小滑动距离，防止误触
+        };
+        
+        // 设置触摸事件监听
+        this.setupTouchEvents();
     }
     
-    // 新增：从文件加载地图的方法
-    loadMapFromFile(filename) {
-        return fetch(filename)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`无法加载${filename}: ${response.status} ${response.statusText}`);
-                }
-                return response.text();
-            })
-            .then(content => {
-                console.log(`成功加载地图文件: ${filename}`);
-                this.loadMap(content);
-                return true;
-            })
-            .catch(error => {
-                console.error(`加载地图文件失败: ${error.message}`);
-                return false;
-            });
-    }
-    
-    setupEventListeners() {
-        // 键盘按下事件
-        document.addEventListener('keydown', (e) => {
-            // 如果控制台处于活动状态，不处理移动键
-            if (this.isConsoleActive) return;
+    // 添加触摸事件监听方法
+    setupTouchEvents() {
+        this.canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // 阻止默认行为
             
-            switch (e.key.toLowerCase()) {
-                case 'w': this.keys.w = true; break;
-                case 'a': this.keys.a = true; break;
-                case 's': this.keys.s = true; break;
-                case 'd': this.keys.d = true; break;
+            const touch = e.touches[0];
+            this.touchControl.startX = touch.clientX;
+            this.touchControl.startY = touch.clientY;
+            this.touchControl.isMoving = true;
+            
+            // 重置所有按键状态
+            this.keys.w = false;
+            this.keys.a = false;
+            this.keys.s = false;
+            this.keys.d = false;
+        });
+        
+        this.canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            
+            if (!this.touchControl.isMoving) return;
+            
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - this.touchControl.startX;
+            const deltaY = touch.clientY - this.touchControl.startY;
+            
+            // 只有当滑动距离超过最小值时才触发移动
+            if (Math.abs(deltaX) > this.touchControl.minSwipeDistance || 
+                Math.abs(deltaY) > this.touchControl.minSwipeDistance) {
+                
+                // 重置所有按键状态
+                this.keys.w = false;
+                this.keys.a = false;
+                this.keys.s = false;
+                this.keys.d = false;
+                
+                // 判断主要的滑动方向
+                if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                    // 水平移动
+                    if (deltaX > 0) {
+                        this.keys.d = true; // 右
+                    } else {
+                        this.keys.a = true; // 左
+                    }
+                } else {
+                    // 垂直移动
+                    if (deltaY > 0) {
+                        this.keys.s = true; // 下
+                    } else {
+                        this.keys.w = true; // 上
+                    }
+                }
+                
+                // 更新起始点，使移动更流畅
+                this.touchControl.startX = touch.clientX;
+                this.touchControl.startY = touch.clientY;
             }
         });
-
-        // 键盘松开事件
-        document.addEventListener('keyup', (e) => {
-            switch (e.key.toLowerCase()) {
-                case 'w': this.keys.w = false; break;
-                case 'a': this.keys.a = false; break;
-                case 's': this.keys.s = false; break;
-                case 'd': this.keys.d = false; break;
-            }
+        
+        this.canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            
+            // 停止所有移动
+            this.touchControl.isMoving = false;
+            this.keys.w = false;
+            this.keys.a = false;
+            this.keys.s = false;
+            this.keys.d = false;
         });
+        
+        this.canvas.addEventListener('touchcancel', (e) => {
+            e.preventDefault();
+            
+            // 停止所有移动
+            this.touchControl.isMoving = false;
+            this.keys.w = false;
+            this.keys.a = false;
+            this.keys.s = false;
+            this.keys.d = false;
+        });
+    }
+    
+    // 修改 setupEventListeners 方法，添加移动设备检测
+    setupEventListeners() {
+        // 检测是否为移动设备
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        if (!isMobile) {
+            // 键盘控制（仅在非移动设备上启用）
+            document.addEventListener('keydown', (e) => {
+                // 如果控制台处于活动状态，不处理移动键
+                if (this.isConsoleActive) return;
+                
+                switch (e.key.toLowerCase()) {
+                    case 'w': this.keys.w = true; break;
+                    case 'a': this.keys.a = true; break;
+                    case 's': this.keys.s = true; break;
+                    case 'd': this.keys.d = true; break;
+                }
+            });
+            
+            document.addEventListener('keyup', (e) => {
+                switch (e.key.toLowerCase()) {
+                    case 'w': this.keys.w = false; break;
+                    case 'a': this.keys.a = false; break;
+                    case 's': this.keys.s = false; break;
+                    case 'd': this.keys.d = false; break;
+                }
+            });
+        }
 
         // 控制台输入框焦点事件
         const consoleInput = document.querySelector('.console-input input');
@@ -355,6 +438,35 @@ class Game {
         
         // 绘制小地图指示器
         this.drawMinimap();
+        
+        // 绘制其他玩家
+        if (this.isOnline && this.otherPlayers.size > 0) {
+            this.otherPlayers.forEach((data, ip) => {
+                const screenX = data.x * this.tileSize - this.camera.x;
+                const screenY = data.y * this.tileSize - this.camera.y;
+                
+                if (this.isPositionVisible(data.x, data.y)) {
+                    this.ctx.font = '24px Arial';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.textBaseline = 'middle';
+                    this.ctx.fillStyle = '#FFD700'; // 金色
+                    this.ctx.fillText(
+                        '👤',  // 使用通用玩家图标
+                        screenX + this.tileSize / 2,
+                        screenY + this.tileSize / 2
+                    );
+                    
+                    // 在玩家上方显示IP
+                    this.ctx.font = '12px Arial';
+                    this.ctx.fillStyle = '#ffffff';
+                    this.ctx.fillText(
+                        ip,
+                        screenX + this.tileSize / 2,
+                        screenY - 10
+                    );
+                }
+            });
+        }
     }
     
     updatePlayer(deltaTime) {
@@ -1227,6 +1339,28 @@ class Game {
             case 'saves':
                 this.listSaveFiles();
                 break;
+            case 'online':
+                if (!this.isOnline) {
+                    this.connectToServer();
+                } else {
+                    this.ws.send(JSON.stringify({ type: 'getOnlineUsers' }));
+                }
+                break;
+            case 'cn':
+                if (!this.isOnline) {
+                    this.addConsoleMessage('请先使用 online 命令连接到服务器', 'error');
+                    return;
+                }
+                if (parts.length < 2) {
+                    this.addConsoleMessage('请指定要连接的用户IP', 'error');
+                    return;
+                }
+                const targetIp = parts[1];
+                this.ws.send(JSON.stringify({
+                    type: 'connect',
+                    targetIp: targetIp
+                }));
+                break;
             default:
                 this.addConsoleMessage(`未知命令: ${cmd}。输入'help'获取可用命令列表。`, 'error');
                 break;
@@ -1517,6 +1651,86 @@ class Game {
         if (nearbyNpc.items && nearbyNpc.items.length > 0) {
             this.addConsoleMessage(`${nearbyNpc.name}携带的物品: ${nearbyNpc.items.join(', ')}`, 'info');
         }
+    }
+    
+    // 添加连接WebSocket的方法
+    connectToServer() {
+        try {
+            this.ws = new WebSocket('ws://localhost:8080');
+            
+            this.ws.onopen = () => {
+                this.isOnline = true;
+                this.addConsoleMessage('成功加入线上模式！', 'system');
+            };
+            
+            this.ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                switch(data.type) {
+                    case 'onlineCount':
+                        this.addConsoleMessage(`当前在线玩家数: ${data.count}`, 'info');
+                        break;
+                    case 'userJoined':
+                        this.addConsoleMessage(`新玩家加入游戏，当前在线玩家数: ${data.count}`, 'system');
+                        break;
+                    case 'userLeft':
+                        this.addConsoleMessage(`玩家离开游戏，当前在线玩家数: ${data.count}`, 'system');
+                        this.otherPlayers.delete(data.ip);
+                        break;
+                    case 'positions':
+                        this.handlePositions(data.positions);
+                        break;
+                }
+            };
+            
+            this.ws.onclose = () => {
+                this.isOnline = false;
+                this.addConsoleMessage('已断开与服务器的连接', 'error');
+                this.otherPlayers.clear();
+            };
+        } catch (error) {
+            this.addConsoleMessage('连接服务器失败: ' + error.message, 'error');
+            this.isOnline = false;
+        }
+    }
+    
+    // 处理其他玩家位置更新
+    handlePositions(positions) {
+        if (!positions || !Array.isArray(positions)) {
+            console.error('收到无效的位置数据:', positions);
+            return;
+        }
+        
+        this.otherPlayers.clear();
+        positions.forEach(data => {
+            if (data.ip !== this.ws._socket.localAddress) { // 不显示自己
+                this.otherPlayers.set(data.ip, {
+                    x: data.position.x,
+                    y: data.position.y,
+                    sprite: data.sprite
+                });
+            }
+        });
+    }
+
+    // 在 Game 类中添加 loadMapFromFile 方法
+    loadMapFromFile(filename) {
+        return fetch(filename)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`无法加载${filename}: ${response.status} ${response.statusText}`);
+                }
+                return response.text();
+            })
+            .then(content => {
+                console.log(`成功加载地图文件: ${filename}`);
+                this.loadMap(content);
+                return true;
+            })
+            .catch(error => {
+                console.error(`加载地图文件失败: ${error.message}`);
+                return false;
+            });
     }
 }
 
