@@ -5,6 +5,105 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Calyphe</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden; /* 防止出现滚动条 */
+        }
+        
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            min-height: 500px; /* 确保最小高度 */
+            overflow: hidden;
+        }
+        
+        .top-panel {
+            background-color: #333;
+            color: white;
+            padding: 10px;
+            flex: 0 0 auto;
+            min-height: 40px;
+        }
+        
+        .main-area {
+            display: flex;
+            flex: 1;
+            min-height: 400px; /* 确保最小高度 */
+            overflow: hidden;
+        }
+        
+        .game-area {
+            position: relative;
+            flex: 3;
+            display: flex;
+            flex-direction: column;
+            min-width: 300px;
+            min-height: 300px;
+        }
+        
+        #gameCanvas {
+            background-color: #222;
+            flex: 1;
+        }
+        
+        .console-panel {
+            background-color: #2a2a2a;
+            color: #ddd;
+            min-height: 100px;
+            max-height: 150px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .console-output {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            max-height: 120px;
+        }
+        
+        .console-input {
+            display: flex;
+            padding: 5px;
+            background-color: #333;
+        }
+        
+        .console-input input {
+            flex: 1;
+            background-color: #444;
+            border: none;
+            color: white;
+            padding: 5px 10px;
+        }
+        
+        .inventory-panel {
+            background-color: #333;
+            color: white;
+            padding: 10px;
+            width: 250px;
+            min-width: 200px;
+            flex: 0 0 auto;
+            overflow-y: auto;
+        }
+        
+        /* 媒体查询，确保在小屏幕上保持基本功能 */
+        @media (max-width: 800px) {
+            .main-area {
+                flex-direction: column;
+            }
+            
+            .inventory-panel {
+                width: 100%;
+                height: auto;
+                max-height: 200px;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="game-container">

@@ -64,33 +64,48 @@ class Game {
         // 初始化UI
         this.initUI();
         
-        // 加载玩家配置
+        // 初始化视野网格（空的）
+        this.visibilityGrid = [];
+        
+        // 使用更安全的加载顺序
+        this.initUI();
+        this.resizeCanvas(); // 先调整画布大小
+        
+        // 使用Promise链确保正确的加载顺序
         this.loadPlayerConfig()
-            .then(() => {
-                // 然后再加载NPC配置
-                return this.loadNpcConfig();
-            })
-            .then(() => {
-                // 然后尝试加载地图
-                return this.loadMapFromFile('map.txt');
-            })
+            .then(() => this.loadNpcConfig())
+            .then(() => this.loadMapFromFile('map.txt'))
             .then(success => {
                 if (!success) {
                     console.log('无法加载map.txt，使用默认地图');
                     this.createDefaultMap();
                 }
-                this.processNpcs(); // 处理地图中的NPC
+                // 加载地图后再初始化视野
+                this.initVisibilityGrid();
+                this.calculateVisibility();
+                this.processNpcs();
+                
+                // 在所有数据加载完成后再绘制地图
                 this.drawMap();
                 this.startGame();
                 
                 // 添加初始日志消息
                 this.addConsoleMessage("欢迎来到Calyphe世界！", "system");
-                this.addConsoleMessage("使用WASD移动，空格键与NPC交互", "system");
+                this.addConsoleMessage("使用WASD移动，空格键与NPC交互", "info");
                 this.addConsoleMessage("在控制台输入'help'获取更多命令", "info");
             });
         
-        // 视野数据
-        this.visibilityGrid = []; // 存储哪些格子可见
+        // 使用防抖函数处理窗口大小调整
+        this.resizeDebounced = this.debounce(() => {
+            this.resizeCanvas();
+        }, 100);
+        
+        // 窗口大小改变时重新计算画布大小并重绘地图
+        window.addEventListener('resize', this.resizeDebounced);
+        
+        // 添加偷窃相关属性
+        this.stealCooldown = 0; // 偷窃冷却时间
+        this.lastStealAttempt = 0; // 上次偷窃尝试时间
     }
     
     // 新增：从文件加载地图的方法
@@ -115,41 +130,36 @@ class Game {
     
     setupEventListeners() {
         // 键盘按下事件
-        window.addEventListener('keydown', (e) => {
-            if (e.key.toLowerCase() === 'w') this.keys.w = true;
-            if (e.key.toLowerCase() === 'a') this.keys.a = true;
-            if (e.key.toLowerCase() === 's') this.keys.s = true;
-            if (e.key.toLowerCase() === 'd') this.keys.d = true;
-            
-            // 更新玩家方向
-            if (e.key.toLowerCase() === 'w') this.player.direction = 'up';
-            if (e.key.toLowerCase() === 'a') this.player.direction = 'left';
-            if (e.key.toLowerCase() === 's') this.player.direction = 'down';
-            if (e.key.toLowerCase() === 'd') this.player.direction = 'right';
-            
-            // 空格键交互
-            if (e.key === ' ' || e.code === 'Space') {
-                if (this.showNpcInfo) {
-                    // 如果已经显示NPC信息，则关闭
-                    this.showNpcInfo = false;
-                    this.activeNpc = null;
-                } else {
-                    // 检查是否有附近的NPC
-                    const nearbyNpc = this.getNearbyNpc();
-                    if (nearbyNpc) {
-                        this.activeNpc = nearbyNpc;
-                        this.showNpcInfo = true;
-                    }
-                }
+        document.addEventListener('keydown', (e) => {
+            switch (e.key.toLowerCase()) {
+                case 'w': this.keys.w = true; break;
+                case 'a': this.keys.a = true; break;
+                case 's': this.keys.s = true; break;
+                case 'd': this.keys.d = true; break;
+                // 删除空格键交互
             }
         });
-        
-        // 键盘释放事件
-        window.addEventListener('keyup', (e) => {
-            if (e.key.toLowerCase() === 'w') this.keys.w = false;
-            if (e.key.toLowerCase() === 'a') this.keys.a = false;
-            if (e.key.toLowerCase() === 's') this.keys.s = false;
-            if (e.key.toLowerCase() === 'd') this.keys.d = false;
+
+        // 键盘松开事件
+        document.addEventListener('keyup', (e) => {
+            switch (e.key.toLowerCase()) {
+                case 'w': this.keys.w = false; break;
+                case 'a': this.keys.a = false; break;
+                case 's': this.keys.s = false; break;
+                case 'd': this.keys.d = false; break;
+            }
+        });
+
+        // 控制台输入事件
+        const consoleInput = document.querySelector('.console-input input');
+        consoleInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const command = e.target.value.trim();
+                if (command) {
+                    this.processCommand(command);
+                    e.target.value = '';
+                }
+            }
         });
     }
     
@@ -209,6 +219,9 @@ class Game {
     }
     
     drawMap() {
+        // 如果地图或视野网格未初始化，则不绘制
+        if (!this.map || !this.map.length) return;
+        
         // 更新摄像机位置
         this.updateCamera();
         
@@ -299,8 +312,24 @@ class Game {
             }
         }
         
-        // 绘制NPC（只显示可见区域的NPC）
-        this.drawNpcs();
+        // 绘制NPC
+        this.npcs.forEach(npc => {
+            const screenX = npc.x - this.camera.x;
+            const screenY = npc.y - this.camera.y;
+            
+            // 检查NPC是否在可见区域内
+            if (this.visibilityGrid[npc.gridY] && this.visibilityGrid[npc.gridY][npc.gridX]) {
+                // 使用NPC的sprite（表情）
+                this.ctx.font = '24px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText(
+                    npc.sprite || '👤', // 如果没有指定sprite，使用默认表情
+                    screenX + npc.size / 2,
+                    screenY + npc.size / 2
+                );
+            }
+        });
         
         // 绘制玩家
         this.drawPlayer();
@@ -495,108 +524,28 @@ class Game {
     
     // 处理地图中的NPC标记
     processNpcs() {
-        this.npcs = []; // 清空现有NPC
-        
-        // 先查找基本NPC标记
+        // 遍历地图寻找NPC标记
         for (let y = 0; y < this.map.length; y++) {
             for (let x = 0; x < this.map[y].length; x++) {
-                if (this.map[y][x] === 'N') {
-                    console.log(`在地图上发现NPC标记: (${x},${y})`);
-                    // 创建基本NPC（没有ID）
-                    this.npcs.push({
-                        x: x * this.tileSize,
-                        y: y * this.tileSize,
-                        size: this.tileSize,
-                        id: '1', // 默认ID
-                        gridX: x,
-                        gridY: y
-                    });
+                const cell = this.map[y][x];
+                if (cell === 'N') {
+                    // 创建NPC实例，使用完整的NPC配置
+                    const npcId = "1"; // 默认使用ID 1，你也可以根据需要设置不同的ID
+                    const npcConfig = this.npcConfig[npcId];
+                    
+                    if (npcConfig) {
+                        const npc = {
+                            x: x * this.tileSize + (this.tileSize - 30) / 2,
+                            y: y * this.tileSize + (this.tileSize - 30) / 2,
+                            gridX: x,
+                            gridY: y,
+                            size: 30,
+                            ...npcConfig  // 展开NPC配置，包含name, sprite, items等属性
+                        };
+                        this.npcs.push(npc);
+                    }
                 }
             }
-        }
-        
-        // 尝试从map.txt整个字符串中提取NPC配置
-        const mapText = this.map.join('\n');
-        console.log("检查地图是否包含NPC配置信息...");
-        
-        // 检查是否有注释行
-        const commentLines = mapText.split('\n').filter(line => line.trim().startsWith('//'));
-        console.log(`找到${commentLines.length}行注释`);
-        
-        // 专门查找NPC配置行
-        let npcConfigLine = '';
-        for (const line of commentLines) {
-            if (line.includes('NPC配置') || line.includes(':')) {
-                npcConfigLine = line;
-                console.log(`找到NPC配置行: ${line}`);
-            }
-        }
-        
-        if (npcConfigLine) {
-            // 提取所有x,y:id格式的配置
-            const npcMatches = npcConfigLine.match(/(\d+),(\d+):(\d+)/g);
-            
-            if (npcMatches && npcMatches.length > 0) {
-                console.log(`从配置中解析到${npcMatches.length}个NPC定义`);
-                
-                npcMatches.forEach(match => {
-                    const parts = match.match(/(\d+),(\d+):(\d+)/);
-                    if (parts && parts.length >= 4) {
-                        const gridX = parseInt(parts[1]);
-                        const gridY = parseInt(parts[2]);
-                        const id = parts[3];
-                        
-                        console.log(`NPC配置: 位置(${gridX},${gridY}), ID=${id}`);
-                        
-                        // 检查这个位置是否已经有NPC
-                        let npc = this.npcs.find(n => n.gridX === gridX && n.gridY === gridY);
-                        
-                        if (!npc) {
-                            // 如果没有找到NPC，创建一个新的
-                            npc = {
-                                x: gridX * this.tileSize,
-                                y: gridY * this.tileSize,
-                                size: this.tileSize,
-                                gridX: gridX,
-                                gridY: gridY,
-                                id: id
-                            };
-                            this.npcs.push(npc);
-                            
-                            // 确保地图上该位置标记为N
-                            if (gridY < this.map.length && gridX < this.map[gridY].length) {
-                                this.map[gridY] = this.map[gridY].substring(0, gridX) + 'N' + 
-                                                  this.map[gridY].substring(gridX + 1);
-                            }
-                        } else {
-                            // 更新现有NPC的ID
-                            npc.id = id;
-                        }
-                        
-                        // 关联NPC配置数据
-                        if (this.npcConfig[id]) {
-                            npc.config = this.npcConfig[id];
-                            console.log(`关联NPC配置: ${npc.config.name}`);
-                        } else {
-                            console.warn(`警告: ID=${id}的NPC配置不存在`);
-                        }
-                    }
-                });
-            } else {
-                console.log("未能在配置行中找到有效的NPC定义");
-            }
-        } else {
-            console.log("未找到NPC配置行");
-        }
-        
-        console.log('地图中发现', this.npcs.length, '个NPC');
-        
-        // 添加额外调试信息
-        if (this.npcs.length > 0) {
-            console.log('NPC列表:');
-            this.npcs.forEach((npc, index) => {
-                console.log(`  ${index+1}. 位置(${npc.gridX},${npc.gridY}), ID=${npc.id}, 配置:`, npc.config ? npc.config.name : '无');
-            });
         }
     }
     
@@ -642,7 +591,7 @@ class Game {
                     this.ctx.font = 'bold 24px Arial';
                     this.ctx.fillStyle = 'white';
                     this.ctx.textAlign = 'center';
-                    this.ctx.textBaseline = 'middle';
+                    this.textBaseline = 'middle';
                     this.ctx.fillText(
                         'N',
                         npc.x + npc.size / 2 - this.camera.x,
@@ -755,22 +704,13 @@ class Game {
     
     // 获取玩家附近的NPC
     getNearbyNpc() {
-        const playerCenterX = this.player.x + this.player.size / 2;
-        const playerCenterY = this.player.y + this.player.size / 2;
-        const interactionDistance = this.tileSize * 1.5;
+        const range = 1; // 互动范围为1格
         
         for (const npc of this.npcs) {
-            const npcCenterX = npc.x + npc.size / 2;
-            const npcCenterY = npc.y + npc.size / 2;
+            const dx = Math.abs(this.player.gridX - npc.gridX);
+            const dy = Math.abs(this.player.gridY - npc.gridY);
             
-            const distance = Math.sqrt(
-                Math.pow(playerCenterX - npcCenterX, 2) +
-                Math.pow(playerCenterY - npcCenterY, 2)
-            );
-            
-            if (distance < interactionDistance) {
-                // 发现NPC时添加消息
-                this.addConsoleMessage(`发现附近的NPC: ${npc.config ? npc.config.name : '未知NPC'}`, 'info');
+            if (dx <= range && dy <= range) {
                 return npc;
             }
         }
@@ -811,6 +751,11 @@ class Game {
     
     // 添加小地图功能（可选）
     drawMinimap() {
+        // 如果地图或视野网格未初始化，则不绘制小地图
+        if (!this.map || !this.map.length || !this.visibilityGrid || !this.visibilityGrid.length) {
+            return;
+        }
+        
         const minimapSize = 150;
         const minimapX = this.canvas.width - minimapSize - 10;
         const minimapY = 10;
@@ -942,6 +887,9 @@ class Game {
     
     // 初始化视野网格
     initVisibilityGrid() {
+        // 如果地图未加载，则不初始化视野网格
+        if (!this.map || !this.map.length) return;
+        
         this.visibilityGrid = [];
         for (let y = 0; y < this.map.length; y++) {
             const row = [];
@@ -1100,7 +1048,6 @@ class Game {
         
         // 设置画布大小以适应新的布局
         this.resizeCanvas();
-        window.addEventListener('resize', () => this.resizeCanvas());
         
         // 更新顶部面板信息
         this.updateTopPanel();
@@ -1108,12 +1055,43 @@ class Game {
     
     // 调整画布大小
     resizeCanvas() {
+        const gameContainer = document.querySelector('.game-container');
         const gameArea = document.querySelector('.game-area');
         const consolePanel = document.querySelector('.console-panel');
         
-        // 画布应该填充游戏区域，但减去控制台的高度
-        this.canvas.width = gameArea.clientWidth;
-        this.canvas.height = gameArea.clientHeight - consolePanel.clientHeight;
+        if (!gameArea || !consolePanel) return; // 防止DOM元素未加载完成
+        
+        // 设置最小高度，确保界面元素不会被挤压消失
+        const minGameAreaHeight = 300;
+        const minConsolePanelHeight = 100;
+        
+        // 计算可用高度，考虑到顶部面板高度
+        const topPanelHeight = document.querySelector('.top-panel').clientHeight;
+        const availableHeight = Math.max(window.innerHeight - topPanelHeight, minGameAreaHeight + minConsolePanelHeight);
+        
+        // 为游戏区域设置固定的最小高度
+        gameArea.style.minHeight = `${minGameAreaHeight}px`;
+        consolePanel.style.minHeight = `${minConsolePanelHeight}px`;
+        
+        // 分配高度，游戏区域占75%，控制台占25%
+        const gameAreaHeight = Math.max(availableHeight * 0.75, minGameAreaHeight);
+        const consolePanelHeight = Math.max(availableHeight * 0.25, minConsolePanelHeight);
+        
+        // 设置整个游戏容器的高度
+        gameContainer.style.height = `${availableHeight}px`;
+        
+        // 设置游戏区域的高度
+        gameArea.style.height = `${gameAreaHeight}px`;
+        
+        // 确保画布与游戏区域大小匹配（减去控制台高度）
+        this.canvas.width = Math.max(gameArea.clientWidth, 300);
+        this.canvas.height = Math.max(gameArea.clientHeight - consolePanel.clientHeight, 200);
+        
+        // 只有当地图已初始化时才重绘
+        if (this.player && this.map && this.map.length) {
+            this.updateCamera();
+            this.drawMap();
+        }
     }
     
     // 更新顶部面板信息
@@ -1149,17 +1127,37 @@ class Game {
     
     // 处理控制台命令
     processCommand(command) {
+        // 如果命令以斜杠开头，去掉斜杠
+        if (command.startsWith('/')) {
+            command = command.substring(1);
+        }
+        
         this.addConsoleMessage(`> ${command}`, 'player');
         
-        // 命令解析
         const parts = command.split(' ');
         const cmd = parts[0].toLowerCase();
+        const args = parts.slice(1);
         
         switch (cmd) {
-            case 'help':
-                this.addConsoleMessage('可用命令: help, look, stats, inventory, map, clear', 'system');
+            case 'talk':
+                this.talkToNpc();
                 break;
-            
+            case 'steal':
+                this.attemptSteal();
+                break;
+            case 'help':
+                this.addConsoleMessage('可用命令:', 'system');
+                this.addConsoleMessage('talk - 与附近的NPC对话', 'info');
+                this.addConsoleMessage('steal - 尝试偷取NPC的物品', 'info');
+                this.addConsoleMessage('look - 查看周围环境', 'info');
+                this.addConsoleMessage('stats - 查看角色属性', 'info');
+                this.addConsoleMessage('inventory - 查看背包', 'info');
+                this.addConsoleMessage('map - 查看小地图', 'info');
+                this.addConsoleMessage('clear - 清空控制台', 'info');
+                this.addConsoleMessage('save [名称] - 保存游戏', 'info');
+                this.addConsoleMessage('load [名称] - 加载游戏', 'info');
+                this.addConsoleMessage('saves - 查看存档列表', 'info');
+                break;
             case 'look':
                 this.addConsoleMessage('你环顾四周...', 'info');
                 // 检查附近的实体
@@ -1170,7 +1168,6 @@ class Game {
                     this.addConsoleMessage('这里没有其他生物。', 'info');
                 }
                 break;
-            
             case 'stats':
                 this.addConsoleMessage('你的属性:', 'system');
                 const attrs = this.playerConfig.attributes;
@@ -1178,7 +1175,6 @@ class Game {
                     this.addConsoleMessage(`${key}: ${attrs[key]}`, 'info');
                 }
                 break;
-            
             case 'inventory':
                 if (this.playerConfig.inventory.length === 0) {
                     this.addConsoleMessage('你的背包是空的。', 'info');
@@ -1189,17 +1185,29 @@ class Game {
                     });
                 }
                 break;
-            
             case 'map':
                 this.addConsoleMessage(`当前地图: ${this.mapName}`, 'system');
                 this.addConsoleMessage(`你的位置: (${this.player.gridX},${this.player.gridY})`, 'info');
                 break;
-            
             case 'clear':
                 document.getElementById('consoleOutput').innerHTML = '';
                 this.console.messages = [];
                 break;
-            
+            case 'save':
+                const saveName = parts.length > 1 ? parts.slice(1).join('_') : '';
+                this.saveGameState(saveName);
+                break;
+            case 'load':
+                if (parts.length < 2) {
+                    this.addConsoleMessage('请指定要加载的存档名称。使用 /saves 查看可用存档。', 'error');
+                } else {
+                    const loadName = parts.slice(1).join('_');
+                    this.loadGameState(loadName);
+                }
+                break;
+            case 'saves':
+                this.listSaveFiles();
+                break;
             default:
                 this.addConsoleMessage(`未知命令: ${cmd}。输入'help'获取可用命令列表。`, 'error');
                 break;
@@ -1209,43 +1217,28 @@ class Game {
     // 更新背包UI
     updateInventoryUI() {
         const inventoryList = document.getElementById('inventoryList');
+        if (!inventoryList) return;
+        
         inventoryList.innerHTML = '';
         
-        if (!this.playerConfig.inventory || this.playerConfig.inventory.length === 0) {
-            const emptyMsg = document.createElement('div');
-            emptyMsg.className = 'inventory-empty';
-            emptyMsg.textContent = '背包是空的';
-            inventoryList.appendChild(emptyMsg);
-            return;
-        }
-        
-        this.playerConfig.inventory.forEach(item => {
-            const itemElement = document.createElement('div');
-            itemElement.className = `inventory-item ${item.equipped ? 'equipped' : ''}`;
-            
-            itemElement.innerHTML = `
-                <div class="inventory-item-icon">${item.icon || '📦'}</div>
-                <div class="inventory-item-details">
-                    <div class="inventory-item-name">${item.name}</div>
-                    <div class="inventory-item-description">${item.description || ''}</div>
-                </div>
-                <div class="inventory-item-quantity">x${item.quantity}</div>
-            `;
-            
-            // 点击道具显示详情
-            itemElement.addEventListener('click', () => {
-                this.addConsoleMessage(`物品: ${item.name}`, 'system');
-                this.addConsoleMessage(`${item.description || '没有描述'}`, 'info');
-                if (item.effect) {
-                    const effects = Object.entries(item.effect)
-                        .map(([key, value]) => `${key}: ${value > 0 ? '+' : ''}${value}`)
-                        .join(', ');
-                    this.addConsoleMessage(`效果: ${effects}`, 'info');
-                }
+        if (this.playerConfig.inventory && this.playerConfig.inventory.length > 0) {
+            this.playerConfig.inventory.forEach(item => {
+                const itemElement = document.createElement('div');
+                itemElement.className = 'inventory-item';
+                itemElement.innerHTML = `
+                    <div class="inventory-item-icon">📦</div>
+                    <div class="inventory-item-details">
+                        <div class="inventory-item-name">${item.name}</div>
+                    </div>
+                `;
+                inventoryList.appendChild(itemElement);
             });
-            
-            inventoryList.appendChild(itemElement);
-        });
+        } else {
+            const emptyMessage = document.createElement('div');
+            emptyMessage.className = 'inventory-empty';
+            emptyMessage.textContent = '背包是空的';
+            inventoryList.appendChild(emptyMessage);
+        }
     }
     
     // 更新属性UI
@@ -1320,6 +1313,191 @@ class Game {
             'intelligence': '智力'
         };
         return nameMap[attr] || attr;
+    }
+    
+    // 添加保存游戏状态功能
+    saveGameState(saveName) {
+        if (!saveName) {
+            saveName = `save_${new Date().toISOString().replace(/[:.]/g, '-')}`;
+        }
+        
+        // 收集需要保存的游戏状态
+        const gameState = {
+            player: {
+                gridX: this.player.gridX,
+                gridY: this.player.gridY,
+                direction: this.player.direction
+            },
+            playerConfig: this.playerConfig,
+            mapName: this.mapName,
+            map: this.map,
+            timestamp: new Date().toISOString(),
+            version: '1.0'
+        };
+        
+        // 在浏览器环境中使用localStorage
+        try {
+            const saveKey = `calyphe_save_${saveName}`;
+            localStorage.setItem(saveKey, JSON.stringify(gameState));
+            this.addConsoleMessage(`游戏已保存: ${saveName}`, 'system');
+            console.log(`游戏已保存到localStorage: ${saveKey}`);
+        } catch (error) {
+            this.addConsoleMessage(`保存游戏失败: ${error.message}`, 'error');
+            console.error('保存游戏失败:', error);
+        }
+    }
+    
+    // 添加加载游戏状态功能
+    loadGameState(saveName) {
+        try {
+            const saveKey = `calyphe_save_${saveName}`;
+            const savedState = localStorage.getItem(saveKey);
+            
+            if (savedState) {
+                const gameState = JSON.parse(savedState);
+                this.applyGameState(gameState);
+                this.addConsoleMessage(`游戏已加载: ${saveName}`, 'system');
+                console.log(`已从localStorage加载游戏: ${saveKey}`);
+            } else {
+                this.addConsoleMessage(`未找到存档: ${saveName}`, 'error');
+            }
+        } catch (error) {
+            this.addConsoleMessage(`加载游戏失败: ${error.message}`, 'error');
+            console.error('加载游戏失败:', error);
+        }
+    }
+    
+    // 应用加载的游戏状态
+    applyGameState(gameState) {
+        if (!gameState) return;
+        
+        // 恢复地图
+        this.map = gameState.map;
+        this.mapName = gameState.mapName;
+        
+        // 恢复玩家位置
+        this.player.gridX = gameState.player.gridX;
+        this.player.gridY = gameState.player.gridY;
+        this.player.direction = gameState.player.direction;
+        this.player.x = this.player.gridX * this.tileSize + (this.tileSize - this.player.size) / 2;
+        this.player.y = this.player.gridY * this.tileSize + (this.tileSize - this.player.size) / 2;
+        
+        // 恢复玩家配置
+        this.playerConfig = gameState.playerConfig;
+        
+        // 更新界面
+        this.updateInventoryUI();
+        this.updateAttributesUI();
+        this.updateTopPanel();
+        
+        // 重新计算视野和处理NPC
+        this.initVisibilityGrid();
+        this.calculateVisibility();
+        this.processNpcs();
+        
+        // 重绘地图
+        this.drawMap();
+    }
+    
+    // 列出可用的存档文件
+    listSaveFiles() {
+        // 浏览器环境使用localStorage
+        const savePrefix = 'calyphe_save_';
+        const saves = [];
+        
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(savePrefix)) {
+                saves.push(key.substring(savePrefix.length));
+            }
+        }
+        
+        if (saves.length === 0) {
+            this.addConsoleMessage('没有找到存档文件', 'system');
+        } else {
+            this.addConsoleMessage('可用的存档:', 'system');
+            saves.forEach(save => {
+                this.addConsoleMessage(`- ${save}`, 'info');
+            });
+        }
+    }
+    
+    // 添加防抖函数
+    debounce(func, wait) {
+        let timeout;
+        return function() {
+            const context = this;
+            const args = arguments;
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+                func.apply(context, args);
+            }, wait);
+        };
+    }
+    
+    // 添加偷窃功能
+    attemptSteal() {
+        // 检查是否有NPC在附近
+        const nearbyNpc = this.getNearbyNpc();
+        if (!nearbyNpc) {
+            this.addConsoleMessage('附近没有可以偷窃的目标。', 'error');
+            return;
+        }
+        
+        // 检查冷却时间
+        const now = Date.now();
+        if (now - this.lastStealAttempt < this.stealCooldown) {
+            const remainingCooldown = Math.ceil((this.stealCooldown - (now - this.lastStealAttempt)) / 1000);
+            this.addConsoleMessage(`偷窃冷却中，还需等待 ${remainingCooldown} 秒`, 'warning');
+            return;
+        }
+        
+        // 计算偷窃成功率
+        const successChance = Math.max(0, 100 - nearbyNpc.alertness);
+        const roll = Math.random() * 100;
+        
+        if (roll < successChance) {
+            // 偷窃成功
+            if (nearbyNpc.items && nearbyNpc.items.length > 0) {
+                // 随机选择一个物品
+                const itemIndex = Math.floor(Math.random() * nearbyNpc.items.length);
+                const stolenItem = nearbyNpc.items[itemIndex];
+                
+                // 添加到玩家背包
+                this.playerConfig.inventory.push(stolenItem);
+                
+                // 从NPC物品列表中移除
+                nearbyNpc.items.splice(itemIndex, 1);
+                
+                this.addConsoleMessage(`成功偷到了 ${stolenItem}！`, 'system');
+                this.updateInventoryUI();
+            } else {
+                this.addConsoleMessage(`${nearbyNpc.name}身上没有任何物品可偷。`, 'warning');
+            }
+        } else {
+            // 偷窃失败
+            this.addConsoleMessage(`${nearbyNpc.name}警觉性很高，偷窃失败！`, 'error');
+            this.stealCooldown = 30000; // 30秒冷却时间
+        }
+        
+        this.lastStealAttempt = now;
+    }
+    
+    // 与NPC对话
+    talkToNpc() {
+        const nearbyNpc = this.getNearbyNpc();
+        if (!nearbyNpc) {
+            this.addConsoleMessage('附近没有可以交谈的对象。', 'error');
+            return;
+        }
+        
+        // 显示NPC对话
+        this.addConsoleMessage(`${nearbyNpc.name}: ${nearbyNpc.dialogue}`, 'npc');
+        
+        // 显示NPC的物品列表
+        if (nearbyNpc.items && nearbyNpc.items.length > 0) {
+            this.addConsoleMessage(`${nearbyNpc.name}携带的物品: ${nearbyNpc.items.join(', ')}`, 'info');
+        }
     }
 }
 

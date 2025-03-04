@@ -6,7 +6,8 @@ const npcConfig = {
         sprite: "👴", // 使用emoji作为简单图形
         items: ["任务卷轴", "钥匙"],
         dialogue: "欢迎来到我们的村庄，年轻人！",
-        function: "quest_giver"
+        function: "quest_giver",
+        alertness: 70  // 警戒值高，很难偷到东西
     },
     "2": {
         id: "2",
@@ -14,7 +15,8 @@ const npcConfig = {
         sprite: "👨",
         items: ["药水", "剑", "盾牌"],
         dialogue: "要买些什么吗？我这里应有尽有！",
-        function: "shop"
+        function: "shop",
+        alertness: 60  // 比较警惕
     },
     "3": {
         id: "3",
@@ -22,7 +24,8 @@ const npcConfig = {
         sprite: "🔨",
         items: ["铁剑", "铁盾"],
         dialogue: "需要武器装备吗？我可以帮你打造！",
-        function: "blacksmith"
+        function: "blacksmith",
+        alertness: 40  // 专注于工作，警惕性一般
     },
     "4": {
         id: "4",
@@ -30,7 +33,8 @@ const npcConfig = {
         sprite: "👩‍🌾",
         items: ["小麦", "胡萝卜"],
         dialogue: "今年的收成不错！",
-        function: "none"
+        function: "none",
+        alertness: 30  // 比较单纯，容易得手
     },
     "5": {
         id: "5",
@@ -38,7 +42,8 @@ const npcConfig = {
         sprite: "💂",
         items: ["钢剑"],
         dialogue: "止步！这里是禁地！",
-        function: "guard"
+        function: "guard",
+        alertness: 90  // 非常警惕
     },
     "6": {
         id: "6",
