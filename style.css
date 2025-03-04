@@ -1,0 +1,211 @@
+body {
+    font-family: 'Courier New', monospace;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    background-color: #000000;
+    color: #f0f0f0;
+    overflow: hidden;
+}
+
+.game-container {
+    display: flex;
+    flex-direction: column;
+    width: 90vw;
+    height: 90vh;
+}
+
+.top-panel {
+    height: 40px;
+    background-color: #111;
+    border-bottom: 1px solid #444;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    color: #aaa;
+    font-size: 14px;
+}
+
+.main-area {
+    display: flex;
+    flex-grow: 1;
+}
+
+.game-area {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+canvas {
+    background-color: #111;
+    flex-grow: 1;
+    border: 1px solid #444;
+}
+
+.inventory-panel {
+    width: 250px;
+    background-color: #111;
+    border-left: 1px solid #444;
+    padding: 10px;
+    overflow-y: auto;
+}
+
+.console-panel {
+    height: 150px;
+    background-color: #111;
+    border-top: 1px solid #444;
+    padding: 10px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.console-output {
+    flex-grow: 1;
+    overflow-y: auto;
+    margin-bottom: 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    color: #aaa;
+}
+
+.console-input {
+    display: flex;
+}
+
+.console-input input {
+    flex-grow: 1;
+    background-color: #222;
+    border: 1px solid #444;
+    padding: 5px;
+    color: #fff;
+    font-family: 'Courier New', monospace;
+}
+
+.panel-title {
+    font-weight: bold;
+    color: #4CAF50;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 5px;
+}
+
+.inventory-item {
+    display: flex;
+    align-items: center;
+    padding: 5px;
+    border-bottom: 1px solid #222;
+    cursor: pointer;
+}
+
+.inventory-item:hover {
+    background-color: #222;
+}
+
+.inventory-item-icon {
+    margin-right: 10px;
+    font-size: 18px;
+}
+
+.inventory-item-details {
+    flex-grow: 1;
+}
+
+.inventory-item-name {
+    font-weight: bold;
+    color: #ddd;
+}
+
+.inventory-item-description {
+    font-size: 12px;
+    color: #999;
+}
+
+.inventory-item-quantity {
+    color: #4CAF50;
+    font-weight: bold;
+}
+
+.inventory-item.equipped .inventory-item-name::after {
+    content: " [E]";
+    color: #4CAF50;
+}
+
+.attribute-list {
+    margin-top: 20px;
+}
+
+.attribute {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+}
+
+.attribute-name {
+    color: #aaa;
+}
+
+.attribute-value {
+    color: #4CAF50;
+}
+
+.health-bar, .mana-bar, .exp-bar {
+    height: 8px;
+    margin-top: 2px;
+    background-color: #333;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.health-bar-fill {
+    height: 100%;
+    background-color: #f44336;
+}
+
+.mana-bar-fill {
+    height: 100%;
+    background-color: #2196F3;
+}
+
+.exp-bar-fill {
+    height: 100%;
+    background-color: #4CAF50;
+}
+
+.console-message {
+    margin: 2px 0;
+}
+
+.console-message.info {
+    color: #aaa;
+}
+
+.console-message.system {
+    color: #4CAF50;
+}
+
+.console-message.warning {
+    color: #FFC107;
+}
+
+.console-message.error {
+    color: #f44336;
+}
+
+.console-message.player {
+    color: #2196F3;
+}
+
+.ascii-art {
+    font-family: monospace;
+    white-space: pre;
+    line-height: 1;
+}
+
+h1, .instructions {
+    display: none;
+} 

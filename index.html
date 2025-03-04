@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calyphe</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <!-- 顶部信息面板 -->
+        <div class="top-panel">
+            <div class="location-info">位置: 未知区域 (0,0) | 地图: 初始迷宫</div>
+        </div>
+        
+        <div class="main-area">
+            <!-- 游戏主区域 -->
+            <div class="game-area">
+                <canvas id="gameCanvas"></canvas>
+                
+                <!-- 控制台面板 -->
+                <div class="console-panel">
+                    <div class="console-output" id="consoleOutput"></div>
+                    <div class="console-input">
+                        <input type="text" id="consoleInput" placeholder="输入命令..." />
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 背包面板 -->
+            <div class="inventory-panel">
+                <div class="panel-title">角色信息</div>
+                <div class="attribute-list" id="attributesList"></div>
+                
+                <div class="panel-title">背包</div>
+                <div class="inventory-list" id="inventoryList"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="player-config.js"></script>
+    <script src="npc-config.js"></script>
+    <script src="game.js"></script>
+</body>
+</html> 

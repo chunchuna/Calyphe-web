@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>迷宫地图编辑器</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            text-align: center;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        h1 {
+            color: #333;
+        }
+        
+        .editor-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .control-group {
+            margin: 10px;
+        }
+        
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        button.selected {
+            background-color: #2196F3;
+        }
+        
+        .map-grid {
+            display: inline-block;
+            border: 2px solid #333;
+            margin: 20px 0;
+            overflow: auto;
+        }
+        
+        .grid-row {
+            display: flex;
+        }
+        
+        .grid-cell {
+            width: 30px;
+            height: 30px;
+            border: 1px solid #ccc;
+            background-color: white;
+            cursor: pointer;
+        }
+        
+        .cell-wall {
+            background-color: #333;
+        }
+        
+        .cell-player {
+            background-color: blue;
+        }
+        
+        textarea {
+            width: 100%;
+            height: 150px;
+            margin-top: 20px;
+            font-family: monospace;
+            resize: vertical;
+        }
+        
+        .cell-npc {
+            background-color: green;
+            position: relative;
+        }
+        
+        .cell-npc::after {
+            content: 'N';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-weight: bold;
+        }
+        
+        .npc-panel {
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 15px;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        
+        .npc-preview {
+            display: flex;
+            margin: 15px 0;
+            padding: 10px;
+            border: 1px solid #eee;
+            border-radius: 5px;
+        }
+        
+        .npc-icon {
+            font-size: 2em;
+            margin-right: 10px;
+        }
+        
+        .npc-info {
+            flex: 1;
+        }
+        
+        .npc-name {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="editor-container">
+        <h1>迷宫地图编辑器</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <button id="btnWall" class="selected">墙壁 (#)</button>
+                <button id="btnPlayer">玩家 (P)</button>
+                <button id="btnNpc">NPC (N)</button>
+                <button id="btnEmpty">空白</button>
+            </div>
+            
+            <div class="control-group">
+                <label for="mapWidth">宽度: </label>
+                <input type="number" id="mapWidth" value="20" min="5" max="50">
+                <label for="mapHeight">高度: </label>
+                <input type="number" id="mapHeight" value="15" min="5" max="50">
+                <button id="btnResize">调整大小</button>
+            </div>
+            
+            <div class="control-group">
+                <button id="btnClear">清空地图</button>
+                <button id="btnReset">重置</button>
+                <button id="btnGenerateBorder">生成边框</button>
+            </div>
+            
+            <div class="control-group">
+                <button id="btnExport">导出地图</button>
+                <button id="btnImport">导入地图</button>
+            </div>
+        </div>
+        
+        <div id="mapGrid" class="map-grid"></div>
+        
+        <textarea id="mapOutput" placeholder="地图代码将在这里显示..."></textarea>
+        
+        <div id="npcPanel" class="npc-panel" style="display: none;">
+            <h3>NPC配置</h3>
+            <select id="npcId">
+                <option value="">选择NPC...</option>
+            </select>
+            <div id="npcPreview" class="npc-preview">
+                <div class="npc-icon"></div>
+                <div class="npc-info">
+                    <div class="npc-name"></div>
+                    <div class="npc-items"></div>
+                    <div class="npc-function"></div>
+                </div>
+            </div>
+            <button id="confirmNpc">确认</button>
+            <button id="cancelNpc">取消</button>
+        </div>
+    </div>
+    
+    <script>
+        // 直接在HTML中定义NPC配置，避免通过fetch加载
+        const npcConfig = {
+            "1": {
+                id: "1",
+                name: "村长",
+                sprite: "👴",
+                items: ["任务卷轴", "钥匙"],
+                dialogue: "欢迎来到我们的村庄，年轻人！",
+                function: "quest_giver"
+            },
+            "2": {
+                id: "2",
+                name: "商人",
+                sprite: "👨",
+                items: ["药水", "剑", "盾牌"],
+                dialogue: "要买些什么吗？我这里应有尽有！",
+                function: "shop"
+            },
+            "3": {
+                id: "3",
+                name: "铁匠",
+                sprite: "🔨",
+                items: ["铁剑", "铁盾"],
+                dialogue: "需要武器装备吗？我可以帮你打造！",
+                function: "blacksmith"
+            },
+            "4": {
+                id: "4",
+                name: "农民",
+                sprite: "👩‍🌾",
+                items: ["小麦", "胡萝卜"],
+                dialogue: "今年的收成不错！",
+                function: "none"
+            },
+            "5": {
+                id: "5",
+                name: "守卫",
+                sprite: "💂",
+                items: ["钢剑"],
+                dialogue: "止步！这里是禁地！",
+                function: "guard"
+            }
+        };
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            const mapGrid = document.getElementById('mapGrid');
+            const mapOutput = document.getElementById('mapOutput');
+            const mapWidthInput = document.getElementById('mapWidth');
+            const mapHeightInput = document.getElementById('mapHeight');
+            
+            // 工具按钮
+            const btnWall = document.getElementById('btnWall');
+            const btnPlayer = document.getElementById('btnPlayer');
+            const btnEmpty = document.getElementById('btnEmpty');
+            const btnNpc = document.getElementById('btnNpc');
+            
+            // 功能按钮
+            const btnResize = document.getElementById('btnResize');
+            const btnClear = document.getElementById('btnClear');
+            const btnReset = document.getElementById('btnReset');
+            const btnGenerateBorder = document.getElementById('btnGenerateBorder');
+            const btnExport = document.getElementById('btnExport');
+            const btnImport = document.getElementById('btnImport');
+            
+            // 新增NPC相关DOM元素和变量
+            const npcPanel = document.getElementById('npcPanel');
+            const npcIdSelect = document.getElementById('npcId');
+            const npcPreview = document.getElementById('npcPreview');
+            const confirmNpcBtn = document.getElementById('confirmNpc');
+            const cancelNpcBtn = document.getElementById('cancelNpc');
+            
+            // NPC图标和信息元素
+            const npcIcon = npcPreview.querySelector('.npc-icon');
+            const npcName = npcPreview.querySelector('.npc-name');
+            const npcItems = npcPreview.querySelector('.npc-items');
+            const npcFunction = npcPreview.querySelector('.npc-function');
+            
+            // 当前选择的工具
+            let currentTool = 'wall'; // 'wall', 'player', 'empty', 'npc'
+            
+            // 地图数据
+            let mapData = [];
+            let playerPosition = { x: -1, y: -1 }; // 跟踪玩家位置
+            // 鼠标按下状态
+            let isMouseDown = false;
+            
+            // 新增NPC数据 - 存储在地图上的NPC的ID和位置
+            let mapNpcs = {};
+            
+            // 当前待放置的NPC ID
+            let currentNpcId = '';
+            
+            // 加载NPC配置数据
+            function loadNpcConfig() {
+                // 检查是否已经有全局npcConfig对象（来自内联脚本或已加载的外部脚本）
+                if (typeof npcConfig !== 'undefined') {
+                    populateNpcSelect();
+                    return;
+                }
+                
+                // 如果没有预定义的配置，创建默认配置
+                window.npcConfig = {
+                    "1": {
+                        id: "1",
+                        name: "村长", 
+                        sprite: "👴",
+                        items: ["任务卷轴"],
+                        dialogue: "欢迎来到我们的村庄！",
+                        function: "quest_giver"
+                    },
+                    "2": {
+                        id: "2", 
+                        name: "商人", 
+                        sprite: "👨",
+                        items: ["药水", "剑"],
+                        dialogue: "要买些什么吗？",
+                        function: "shop"
+                    }
+                };
+                
+                console.log('使用默认NPC配置');
+                populateNpcSelect();
+            }
+            
+            // 填充NPC选择下拉框
+            function populateNpcSelect() {
+                npcIdSelect.innerHTML = '<option value="">选择NPC...</option>';
+                for (const id in npcConfig) {
+                    const npc = npcConfig[id];
+                    const option = document.createElement('option');
+                    option.value = id;
+                    option.text = `${id}: ${npc.name} (${npc.function})`;
+                    npcIdSelect.appendChild(option);
+                }
+            }
+            
+            // 更新NPC预览
+            function updateNpcPreview(id) {
+                if (id && npcConfig[id]) {
+                    const npc = npcConfig[id];
+                    npcIcon.textContent = npc.sprite || 'N';
+                    npcName.textContent = npc.name;
+                    npcItems.textContent = `物品: ${npc.items.join(', ')}`;
+                    npcFunction.textContent = `功能: ${npc.function}`;
+                    npcPreview.style.display = 'flex';
+                } else {
+                    npcPreview.style.display = 'none';
+                }
+            }
+            
+            // NPC选择变化时更新预览
+            npcIdSelect.addEventListener('change', function() {
+                updateNpcPreview(this.value);
+            });
+            
+            // 确认NPC选择
+            confirmNpcBtn.addEventListener('click', function() {
+                currentNpcId = npcIdSelect.value;
+                if (!currentNpcId) {
+                    alert('请选择一个NPC');
+                    return;
+                }
+                npcPanel.style.display = 'none';
+                // 继续使用NPC工具
+            });
+            
+            // 取消NPC选择
+            cancelNpcBtn.addEventListener('click', function() {
+                npcPanel.style.display = 'none';
+                setActiveTool('empty'); // 切换回空白工具
+            });
+            
+            // 点击NPC工具按钮
+            btnNpc.addEventListener('click', function() {
+                setActiveTool('npc');
+                npcPanel.style.display = 'block';
+                if (npcIdSelect.options.length <= 1) {
+                    loadNpcConfig();
+                }
+            });
+            
+            // 初始化地图
+            function initMap(width, height, preserveContent = false) {
+                const oldData = preserveContent ? [...mapData] : null;
+                const oldWidth = preserveContent ? (mapData[0] ? mapData[0].length : 0) : 0;
+                const oldHeight = preserveContent ? mapData.length : 0;
+                
+                // 创建新地图数据
+                mapData = [];
+                for (let y = 0; y < height; y++) {
+                    const row = [];
+                    for (let x = 0; x < width; x++) {
+                        // 如果是保留内容模式，且在旧地图范围内，复制旧内容
+                        if (preserveContent && y < oldHeight && x < oldWidth) {
+                            row.push(oldData[y][x]);
+                        } else {
+                            row.push(' ');
+                        }
+                    }
+                    mapData.push(row);
+                }
+                
+                // 如果保留内容，检查玩家位置是否仍在地图内
+                if (preserveContent && playerPosition.x !== -1 && playerPosition.y !== -1) {
+                    if (playerPosition.x >= width || playerPosition.y >= height) {
+                        playerPosition = { x: -1, y: -1 };
+                    }
+                } else {
+                    // 重置玩家位置
+                    playerPosition = { x: -1, y: -1 };
+                }
+                
+                // 重新渲染地图
+                renderMap();
+            }
+            
+            // 渲染地图到网格
+            function renderMap() {
+                // 清空当前网格
+                mapGrid.innerHTML = '';
+                
+                // 创建新的网格
+                for (let y = 0; y < mapData.length; y++) {
+                    const rowElement = document.createElement('div');
+                    rowElement.className = 'grid-row';
+                    
+                    for (let x = 0; x < mapData[y].length; x++) {
+                        const cellElement = document.createElement('div');
+                        cellElement.className = 'grid-cell';
+                        cellElement.dataset.x = x;
+                        cellElement.dataset.y = y;
+                        
+                        if (mapData[y][x] === '#') {
+                            cellElement.classList.add('cell-wall');
+                        } else if (mapData[y][x] === 'P') {
+                            cellElement.classList.add('cell-player');
+                        } else if (mapData[y][x] === 'N') {
+                            cellElement.classList.add('cell-npc');
+                        }
+                        
+                        rowElement.appendChild(cellElement);
+                    }
+                    
+                    mapGrid.appendChild(rowElement);
+                }
+                
+                // 更新文本区域
+                updateMapOutput();
+            }
+            
+            // 完全移除这三个单独的处理函数
+            // handleCellClick, handleMouseDown, handleMouseEnter
+            
+            // 改为使用全局的事件委托来处理所有情况
+            mapGrid.addEventListener('mousedown', function(event) {
+                if (event.target.classList.contains('grid-cell')) {
+                    isMouseDown = true;
+                    const x = parseInt(event.target.dataset.x);
+                    const y = parseInt(event.target.dataset.y);
+                    
+                    console.log('鼠标按下', x, y, '当前工具:', currentTool);
+                    applyTool(x, y);
+                    renderMap();
+                    
+                    // 防止拖动时触发选择操作
+                    event.preventDefault();
+                }
+            });
+            
+            mapGrid.addEventListener('mousemove', function(event) {
+                if (!isMouseDown) return; // 确保只有在鼠标按下时才处理
+                
+                if (event.target.classList.contains('grid-cell')) {
+                    const x = parseInt(event.target.dataset.x);
+                    const y = parseInt(event.target.dataset.y);
+                    
+                    applyTool(x, y);
+                    renderMap();
+                }
+            });
+            
+            // 鼠标抬起，停止绘制
+            document.addEventListener('mouseup', function() {
+                isMouseDown = false;
+            });
+            
+            // 鼠标离开地图区域也停止绘制
+            mapGrid.addEventListener('mouseleave', function() {
+                isMouseDown = false;
+            });
+            
+            // 应用当前工具到指定位置
+            function applyTool(x, y) {
+                if (x === undefined || y === undefined || 
+                    x < 0 || y < 0 || 
+                    y >= mapData.length || 
+                    x >= mapData[y].length) {
+                    return; // 防止越界
+                }
+                
+                console.log('应用工具', currentTool, '在位置', x, y);
+                
+                // 处理玩家位置
+                if (currentTool === 'player') {
+                    console.log('放置玩家');
+                    // 如果已经有玩家，先移除
+                    if (playerPosition.x !== -1 && playerPosition.y !== -1) {
+                        mapData[playerPosition.y][playerPosition.x] = ' ';
+                    }
+                    
+                    // 设置新的玩家位置
+                    mapData[y][x] = 'P';
+                    playerPosition = { x, y };
+                } else if (currentTool === 'wall') {
+                    // 如果当前位置是玩家，更新玩家位置
+                    if (mapData[y][x] === 'P') {
+                        playerPosition = { x: -1, y: -1 };
+                    }
+                    
+                    mapData[y][x] = '#';
+                } else if (currentTool === 'empty') {
+                    // 如果当前位置是玩家，更新玩家位置
+                    if (mapData[y][x] === 'P') {
+                        playerPosition = { x: -1, y: -1 };
+                    }
+                    
+                    mapData[y][x] = ' ';
+                } else if (currentTool === 'npc') {
+                    if (!currentNpcId) {
+                        // 如果没有选择NPC，显示选择面板
+                        npcPanel.style.display = 'block';
+                        return;
+                    }
+                    
+                    // 清除该位置的其他元素
+                    if (mapData[y][x] === 'P') {
+                        playerPosition = { x: -1, y: -1 };
+                    }
+                    
+                    // 存储NPC位置和ID
+                    mapNpcs[`${x},${y}`] = currentNpcId;
+                    
+                    // 在地图数据中标记为N
+                    mapData[y][x] = 'N';
+                }
+            }
+            
+            // 更新文本输出
+            function updateMapOutput() {
+                let output = '';
+                for (let y = 0; y < mapData.length; y++) {
+                    for (let x = 0; x < mapData[y].length; x++) {
+                        output += mapData[y][x];
+                    }
+                    output += '\n';
+                }
+                
+                // 添加NPC配置到输出
+                const currentOutput = output;
+                let npcLines = '\n// NPC配置 格式: x,y:id\n// ';
+                
+                for (const pos in mapNpcs) {
+                    npcLines += `${pos}:${mapNpcs[pos]} `;
+                }
+                
+                output = currentOutput + npcLines;
+                
+                mapOutput.value = output;
+            }
+            
+            // 从文本输入解析地图
+            function parseMapInput(text) {
+                const lines = text.trim().split('\n');
+                
+                // 获取最大行长度
+                let maxLength = 0;
+                for (const line of lines) {
+                    maxLength = Math.max(maxLength, line.length);
+                }
+                
+                // 重置玩家位置
+                playerPosition = { x: -1, y: -1 };
+                
+                // 创建新的地图数据
+                mapData = [];
+                for (let y = 0; y < lines.length; y++) {
+                    const row = [];
+                    for (let x = 0; x < maxLength; x++) {
+                        if (x < lines[y].length) {
+                            if (lines[y][x] === 'P') {
+                                playerPosition = { x, y };
+                            }
+                            row.push(lines[y][x]);
+                        } else {
+                            row.push(' ');
+                        }
+                    }
+                    mapData.push(row);
+                }
+                
+                // 更新输入框
+                mapWidthInput.value = maxLength;
+                mapHeightInput.value = lines.length;
+                
+                // 清空现有NPC数据
+                mapNpcs = {};
+                
+                renderMap();
+            }
+            
+            // 生成边框
+            function generateBorder() {
+                const width = mapData[0].length;
+                const height = mapData.length;
+                
+                // 顶部和底部边框
+                for (let x = 0; x < width; x++) {
+                    mapData[0][x] = '#';
+                    mapData[height - 1][x] = '#';
+                }
+                
+                // 左侧和右侧边框
+                for (let y = 0; y < height; y++) {
+                    mapData[y][0] = '#';
+                    mapData[y][width - 1] = '#';
+                }
+                
+                renderMap();
+            }
+            
+            // 导出地图到文件
+            function exportMap() {
+                updateMapOutput();
+                const mapText = mapOutput.value;
+                const blob = new Blob([mapText], {type: 'text/plain'});
+                const a = document.createElement('a');
+                a.download = 'map.txt';
+                a.href = URL.createObjectURL(blob);
+                a.click();
+            }
+            
+            // 设置按钮事件 - 工具选择
+            btnWall.addEventListener('click', function() {
+                console.log('墙壁按钮被点击');
+                setActiveTool('wall');
+            });
+            
+            btnPlayer.addEventListener('click', function() {
+                console.log('玩家按钮被点击');
+                setActiveTool('player');
+            });
+            
+            btnEmpty.addEventListener('click', function() {
+                console.log('空白按钮被点击');
+                setActiveTool('empty');
+            });
+            
+            btnResize.addEventListener('click', function() {
+                const width = parseInt(mapWidthInput.value);
+                const height = parseInt(mapHeightInput.value);
+                
+                if (width >= 5 && width <= 50 && height >= 5 && height <= 50) {
+                    // 传入true表示保留现有内容
+                    initMap(width, height, true);
+                } else {
+                    alert('宽度和高度必须在5到50之间');
+                }
+            });
+            
+            btnClear.addEventListener('click', function() {
+                const width = mapData[0].length;
+                const height = mapData.length;
+                initMap(width, height);
+            });
+            
+            btnReset.addEventListener('click', function() {
+                const defaultWidth = 20;
+                const defaultHeight = 15;
+                
+                mapWidthInput.value = defaultWidth;
+                mapHeightInput.value = defaultHeight;
+                
+                initMap(defaultWidth, defaultHeight);
+            });
+            
+            btnGenerateBorder.addEventListener('click', generateBorder);
+            
+            btnExport.addEventListener('click', exportMap);
+            
+            btnImport.addEventListener('click', function() {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.txt';
+                
+                input.onchange = function(event) {
+                    const file = event.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            const content = e.target.result;
+                            parseMapInput(content);
+                        };
+                        reader.readAsText(file);
+                    }
+                };
+                
+                input.click();
+            });
+            
+            mapOutput.addEventListener('input', function() {
+                parseMapInput(mapOutput.value);
+            });
+            
+            // 设置活动工具
+            function setActiveTool(tool) {
+                console.log('设置工具从', currentTool, '到', tool);
+                // 设置当前工具
+                currentTool = tool;
+                
+                // 更新按钮状态
+                btnWall.classList.remove('selected');
+                btnPlayer.classList.remove('selected');
+                btnEmpty.classList.remove('selected');
+                btnNpc.classList.remove('selected');
+                
+                if (tool === 'wall') {
+                    btnWall.classList.add('selected');
+                } else if (tool === 'player') {
+                    btnPlayer.classList.add('selected');
+                } else if (tool === 'empty') {
+                    btnEmpty.classList.add('selected');
+                } else if (tool === 'npc') {
+                    btnNpc.classList.add('selected');
+                }
+                
+                console.log('当前工具现在是:', currentTool); 
+            }
+            
+            // 初始化地图
+            initMap(parseInt(mapWidthInput.value), parseInt(mapHeightInput.value));
+        });
+    </script>
+</body>
+</html> 
