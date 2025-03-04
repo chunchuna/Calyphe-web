@@ -5,7 +5,7 @@ const npcConfig = {
         name: "村长",
         sprite: "👴", // 使用emoji作为简单图形
         items: ["任务卷轴", "钥匙"],
-        dialogue: "欢迎来到我们的村庄，年轻人！",
+        dialogue: "牛英超，你好",
         function: "quest_giver",
         alertness: 70  // 警戒值高，很难偷到东西
     },

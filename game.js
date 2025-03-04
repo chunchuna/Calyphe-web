@@ -106,6 +106,9 @@ class Game {
         // 添加偷窃相关属性
         this.stealCooldown = 0; // 偷窃冷却时间
         this.lastStealAttempt = 0; // 上次偷窃尝试时间
+        
+        // 添加控制台焦点状态
+        this.isConsoleActive = false;
     }
     
     // 新增：从文件加载地图的方法
@@ -131,12 +134,14 @@ class Game {
     setupEventListeners() {
         // 键盘按下事件
         document.addEventListener('keydown', (e) => {
+            // 如果控制台处于活动状态，不处理移动键
+            if (this.isConsoleActive) return;
+            
             switch (e.key.toLowerCase()) {
                 case 'w': this.keys.w = true; break;
                 case 'a': this.keys.a = true; break;
                 case 's': this.keys.s = true; break;
                 case 'd': this.keys.d = true; break;
-                // 删除空格键交互
             }
         });
 
@@ -150,8 +155,22 @@ class Game {
             }
         });
 
-        // 控制台输入事件
+        // 控制台输入框焦点事件
         const consoleInput = document.querySelector('.console-input input');
+        consoleInput.addEventListener('focus', () => {
+            this.isConsoleActive = true;
+            // 当获得焦点时，清除所有按键状态
+            this.keys.w = false;
+            this.keys.a = false;
+            this.keys.s = false;
+            this.keys.d = false;
+        });
+        
+        consoleInput.addEventListener('blur', () => {
+            this.isConsoleActive = false;
+        });
+
+        // 控制台输入事件
         consoleInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 const command = e.target.value.trim();
@@ -704,7 +723,7 @@ class Game {
     
     // 获取玩家附近的NPC
     getNearbyNpc() {
-        const range = 1; // 互动范围为1格
+        const range = 10; // 扩大到10格
         
         for (const npc of this.npcs) {
             const dx = Math.abs(this.player.gridX - npc.gridX);
